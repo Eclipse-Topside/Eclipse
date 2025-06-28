@@ -6,11 +6,13 @@ let ai = null;
 
 const getAIClient = () => {
   if (!ai) {
-    if (!process.env.API_KEY) {
-      console.error("API_KEY environment variable not set.");
-      throw new Error("API_KEY environment variable not set.");
+    // Use Vite's import.meta.env for browser compatibility
+    const apiKey = import.meta.env.GEMINI_API_KEY || "AIzaSyBAgO_o-Or4Xb95qSPM6sMgGvHlSSFDOtY";
+    if (!apiKey) {
+      console.error("GEMINI_API_KEY environment variable not set.");
+      throw new Error("GEMINI_API_KEY environment variable not set.");
     }
-    ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    ai = new GoogleGenAI({ apiKey });
   }
   return ai;
 };
