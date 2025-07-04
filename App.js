@@ -1,19 +1,30 @@
 
 
+
+
+
+
+
+
+
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatArea from './components/ChatArea';
 import ImageFullScreenView from './components/ImageFullScreenView';
+import CodeSpace from './components/CodeSpace';
 import { 
   createChatSession, 
   sendMessageStream, 
   generateImage, 
   generateTitleForChat,
   fetchAnswerWithGoogleSearch,
+  generateText,
 } from './services/geminiService';
-import { DEFAULT_CHAT_TITLE, SUGGESTIONS, SuggestionType, MODEL_TEXT } from './constants'; 
+import { DEFAULT_CHAT_TITLE, SUGGESTIONS, SuggestionType, ToolType } from './constants'; 
 
 const App = () => {
+  const [theme, setTheme] = useState(() => localStorage.getItem('eclipse-theme') || 'dark');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [chats, setChats] = useState({});
   const [activeChatId, setActiveChatId] = useState(null);
@@ -26,6 +37,25 @@ const App = () => {
   const [imageLibrary, setImageLibrary] = useState([]);
   const [scrollToMessageId, setScrollToMessageId] = useState(null);
   const [fullScreenImageUrl, setFullScreenImageUrl] = useState(null);
+  const [selectedTool, setSelectedTool] = useState(null);
+  const [speakingMessageId, setSpeakingMessageId] = useState(null);
+
+  // Code Space State
+  const [isCodeSpaceActive, setIsCodeSpaceActive] = useState(false);
+  const [codeSpaceContent, setCodeSpaceContent] = useState('');
+  const [codeSpaceLanguage, setCodeSpaceLanguage] = useState('python');
+  const [codeSpaceOutput, setCodeSpaceOutput] = useState('');
+  const [isRunningCode, setIsRunningCode] = useState(false);
+
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('eclipse-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
+  };
 
   const handleOpenImageFullScreen = (imageUrl) => {
     setFullScreenImageUrl(imageUrl);
@@ -151,7 +181,7 @@ const App = () => {
     });
   }, []);
   
-  const handleNewChat = useCallback(() => {
+  const handleNewChat = useCallback((suppressStateResets = false) => {
     const newChatId = `chat_${Date.now()}`;
     const newChat = {
       id: newChatId,
@@ -163,19 +193,32 @@ const App = () => {
     };
     setChats(prev => ({ ...prev, [newChatId]: newChat }));
     setActiveChatId(newChatId);
-    setInputText('');
-    setImageToEdit(null);
-    setImageToSend(null); 
-    if (window.innerWidth < 768) { 
+    
+    if (!suppressStateResets) {
+      setInputText('');
+      setImageToEdit(null);
+      setImageToSend(null);
+      setSelectedTool(null);
+      if (isCodeSpaceActive) {
+          setIsCodeSpaceActive(false);
+          setCodeSpaceContent('');
+          setCodeSpaceOutput('');
+      }
+    }
+    
+    if (window.innerWidth < 768 && !suppressStateResets) { 
         setSidebarOpen(false); 
     }
-  }, []);
+    return newChatId;
+  }, [isCodeSpaceActive]);
 
   const handleSelectChat = (id) => {
     setActiveChatId(id);
     setInputText(''); 
     setImageToEdit(null);
-    setImageToSend(null); 
+    setImageToSend(null);
+    setSelectedTool(null);
+    if(isCodeSpaceActive) setIsCodeSpaceActive(false);
     if (window.innerWidth < 768) { 
         setSidebarOpen(false); 
     }
@@ -202,12 +245,36 @@ const App = () => {
     });
   }, []);
 
+  const parseAndSetCodeAndText = (fullText, chatId, aiMessageId) => {
+    const codeBlockRegex = /```(\w+)?\n([\s\S]+?)\n```/; 
+    const match = fullText.match(codeBlockRegex);
+
+    let chatText = fullText;
+    if (match) {
+        const language = match[1] || 'plaintext';
+        const code = match[2];
+        chatText = fullText.replace(codeBlockRegex, '').trim();
+        
+        setCodeSpaceLanguage(language);
+        setCodeSpaceContent(code);
+        setCodeSpaceOutput(`// New code received. Ready to run.`);
+    }
+
+    if (chatText === "" && match) {
+        chatText = "Here is the code you requested.";
+    }
+
+    updateChatMessages(chatId, prevMsgs =>
+        prevMsgs.map(msg => msg.id === aiMessageId ? { ...msg, text: chatText, isLoading: false } : msg)
+    );
+  };
 
   const handleSendMessage = useCallback(async (text, suggestionType) => {
     const currentText = text.trim();
     if (!currentText && !imageToSend && !(imageToEdit && suggestionType === SuggestionType.EDIT_IMAGE)) return;
 
     setIsSending(true);
+    const activeTool = selectedTool; // Capture the tool at the time of sending
 
     let currentChatId = activeChatId;
     let geminiChatInstance; 
@@ -227,15 +294,17 @@ const App = () => {
         'draw ', 'paint ', 'show me an image of '
     ];
 
-    let isImageGenerationIntent = false;
+    let isImageGenerationIntent = activeTool === ToolType.CREATE_IMAGE;
     let finalImagePrompt = "";
 
-    if (suggestionType === SuggestionType.CREATE_IMAGE) {
+    if (activeTool === ToolType.CREATE_IMAGE) {
+        finalImagePrompt = currentText;
+    } else if (suggestionType === SuggestionType.CREATE_IMAGE) {
         isImageGenerationIntent = true;
         const createSuggestion = SUGGESTIONS.find(s => s.id === SuggestionType.CREATE_IMAGE);
         const prefixToRemove = createSuggestion?.promptPrefix?.toLowerCase() || '/image ';
         finalImagePrompt = lowerCaseText.startsWith(prefixToRemove) ? currentText.substring(prefixToRemove.length).trim() : currentText;
-    } else { 
+    } else if (!imageToSend && !imageToEdit) { // Only check for text prefixes if no image is being sent
         for (const prefix of imageCommandPrefixes) {
             if (lowerCaseText.startsWith(prefix)) {
                 isImageGenerationIntent = true;
@@ -246,6 +315,12 @@ const App = () => {
     }
     
     if (isImageGenerationIntent && !finalImagePrompt) finalImagePrompt = "a beautiful random landscape";
+
+    // Clean up UI state immediately
+    setInputText('');
+    setImageToSend(null); 
+    setImageToEdit(null);
+    setSelectedTool(null);
 
     if (!currentChatId || !chats[currentChatId]) { 
       const newChatId = `chat_${Date.now()}`;
@@ -271,14 +346,10 @@ const App = () => {
       }
     }
 
-    const imageBeingSentForUpload = imageToSend; 
-    const imageBeingSentForEdit = imageToEdit; 
+    const imageBeingSentForUpload = imageToSend;
+    const imageBeingSentForEdit = imageToEdit;
 
-    setInputText('');
-    setImageToSend(null); 
-    setImageToEdit(null); 
-
-    const aiMessageId = `msg_${Date.now() + 1}_ai`; // Ensure AI message ID is distinct
+    const aiMessageId = `msg_${Date.now() + 1}_ai`;
     const aiPlaceholderMessage = { id: aiMessageId, sender: 'ai', text: '', timestamp: new Date(), isLoading: true };
     updateChatMessages(currentChatId, (prevMsgs) => [...prevMsgs, aiPlaceholderMessage]);
 
@@ -303,14 +374,19 @@ const App = () => {
           }, ...prevLib].sort((a,b) => b.timestamp.getTime() - a.timestamp.getTime()));
       } else { 
         let geminiContentParts = [];
-        if (currentText) geminiContentParts.push({ text: currentText });
+        let promptWithContext = currentText;
 
-        let imageFileToProcess = null;
-        if (imageBeingSentForUpload) { 
-            imageFileToProcess = imageBeingSentForUpload.file;
-        } else if (suggestionType === SuggestionType.EDIT_IMAGE && imageBeingSentForEdit) { 
-            imageFileToProcess = imageBeingSentForEdit.file;
+        if (isCodeSpaceActive) {
+            promptWithContext = `In the context of a Code Space, where you provide code in a separate panel, respond to the following. Provide a concise textual answer in the chat, and place any generated or updated code inside a markdown block. User request: "${currentText}"`
+        } else if (activeTool === ToolType.DEEP_RESEARCH) {
+            promptWithContext = `Perform deep research on the following topic, providing a comprehensive and detailed answer: ${currentText}`;
+        } else if (activeTool === ToolType.WRITE_OR_CODE) {
+            promptWithContext = `Focus on writing or coding for this request: ${currentText}`;
         }
+
+        if (promptWithContext) geminiContentParts.push({ text: promptWithContext });
+
+        let imageFileToProcess = imageBeingSentForUpload?.file || imageBeingSentForEdit?.file;
 
         if (imageFileToProcess) {
             const base64Image = await new Promise((resolve, reject) => {
@@ -330,16 +406,21 @@ const App = () => {
             );
         } else {
             let accumulatedText = "";
-            const serviceToUse = (geminiContentParts.some(p => p.inlineData) || currentText.toLowerCase().includes("this image")) 
+            const isSearchToolActive = activeTool === ToolType.SEARCH_THE_WEB || activeTool === ToolType.DEEP_RESEARCH;
+            const hasImage = geminiContentParts.some(p => p.inlineData);
+
+            const serviceToUse = (hasImage || isCodeSpaceActive || !isSearchToolActive) 
                 ? sendMessageStream.bind(null, geminiChatInstance, geminiContent)
-                : fetchAnswerWithGoogleSearch.bind(null, currentText || "Tell me something interesting.");
+                : fetchAnswerWithGoogleSearch.bind(null, promptWithContext || "Tell me something interesting.");
 
             await serviceToUse(
                 (chunk, sources) => {
                   accumulatedText += chunk;
-                  updateChatMessages(currentChatId, prevMsgs =>
-                    prevMsgs.map(msg => msg.id === aiMessageId ? { ...msg, text: accumulatedText, sources, isLoading: true } : msg)
-                  );
+                  if (!isCodeSpaceActive) {
+                      updateChatMessages(currentChatId, prevMsgs =>
+                        prevMsgs.map(msg => msg.id === aiMessageId ? { ...msg, text: accumulatedText, sources, isLoading: true } : msg)
+                      );
+                  }
                 },
                 (error) => { 
                   console.error("Gemini stream/search error:", error);
@@ -347,10 +428,14 @@ const App = () => {
                     prevMsgs.map(msg => msg.id === aiMessageId ? { ...msg, text: "Sorry, I encountered an error processing your request.", isLoading: false, isError: true } : msg)
                   );
                 },
-                (finalText, sources) => { 
-                  updateChatMessages(currentChatId, prevMsgs =>
-                    prevMsgs.map(msg => msg.id === aiMessageId ? { ...msg, text: finalText, sources, isLoading: false } : msg)
-                  );
+                (finalText, sources) => {
+                  if (isCodeSpaceActive) {
+                    parseAndSetCodeAndText(finalText, currentChatId, aiMessageId);
+                  } else {
+                    updateChatMessages(currentChatId, prevMsgs =>
+                      prevMsgs.map(msg => msg.id === aiMessageId ? { ...msg, text: finalText, sources, isLoading: false } : msg)
+                    );
+                  }
                 }
             );
         }
@@ -363,7 +448,7 @@ const App = () => {
     } finally {
       setIsSending(false);
     }
-  }, [activeChatId, chats, imageToEdit, imageToSend, updateChatMessages, generateTitleIfNeeded, imageLibrary]);
+  }, [activeChatId, chats, imageToEdit, imageToSend, updateChatMessages, generateTitleIfNeeded, imageLibrary, selectedTool, isCodeSpaceActive]);
 
   const handleSendMessageRef = useRef(handleSendMessage);
   useEffect(() => {
@@ -503,6 +588,16 @@ const App = () => {
     }
   }, []);
 
+  const handleDownloadImageFromLibrary = useCallback((imageUrl) => {
+    const link = document.createElement('a');
+    link.href = imageUrl;
+    const filename = imageUrl.substring(imageUrl.lastIndexOf('/') + 1) || 'generated-image.jpg';
+    link.download = filename.startsWith("data:") ? "generated-image.jpg" : filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, []);
+
   const handleShareImageFromLibrary = useCallback(async (imageUrl, promptText) => {
     if (navigator.share) {
         try {
@@ -540,12 +635,170 @@ const App = () => {
     }
   }, []);
 
+  const handleToggleCodeSpace = () => {
+    const willBeActive = !isCodeSpaceActive;
+    setIsCodeSpaceActive(willBeActive);
+  
+    if (willBeActive) {
+      let currentChatId = activeChatId;
+      if (!currentChatId) {
+        currentChatId = handleNewChat(true); // Create new chat and get ID
+      }
+      
+      const introText = "Code Space is now active! I've loaded a sample Python script for you. You can ask me to write, explain, or modify code, and it will appear here.";
+      const introCode = 'def hello_world():\n    print("Hello from Code Space!")\n\nhello_world()';
+      const introLanguage = 'python';
+  
+      const aiMessage = {
+        id: `msg_${Date.now()}_ai_intro`,
+        sender: 'ai',
+        text: introText,
+        timestamp: new Date(),
+      };
+      updateChatMessages(currentChatId, (prevMsgs) => [...prevMsgs, aiMessage]);
+      
+      setCodeSpaceContent(introCode);
+      setCodeSpaceLanguage(introLanguage);
+      setCodeSpaceOutput('// Click "Run" to execute the code.');
+    }
+  };
+
+  const handleRunCode = async () => {
+    if (!codeSpaceContent) {
+        setCodeSpaceOutput("// No code to run.");
+        return;
+    }
+    setIsRunningCode(true);
+    setCodeSpaceOutput(`// Running code...\n\n`);
+
+    try {
+        const prompt = `Given the following ${codeSpaceLanguage} code, predict its output as if it were run in a terminal. Do not explain the code, just provide the raw output.\n\nCode:\n\`\`\`${codeSpaceLanguage}\n${codeSpaceContent}\n\`\`\``;
+        const result = await generateText(prompt);
+        setCodeSpaceOutput(result);
+    } catch (error) {
+        console.error("Error predicting code output:", error);
+        setCodeSpaceOutput(prev => `// Error predicting output: ${error.message}`);
+    } finally {
+        setIsRunningCode(false);
+    }
+  };
+
 
   const handleScrollToMessageComplete = () => {
     setScrollToMessageId(null);
   };
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
+
+  // New action handlers
+  const handleCopyText = (text) => {
+    navigator.clipboard.writeText(text).catch(err => console.error('Failed to copy text: ', err));
+  };
+
+  const handleFeedback = (chatId, messageId, feedbackType) => {
+    updateChatMessages(chatId, (messages) =>
+      messages.map((msg) => {
+        if (msg.id === messageId) {
+          // Toggle feedback off if the same button is clicked again
+          return { ...msg, feedback: msg.feedback === feedbackType ? null : feedbackType };
+        }
+        return msg;
+      })
+    );
+  };
+
+  const handleSpeak = (text, messageId) => {
+    if (speechSynthesis.speaking) {
+      speechSynthesis.cancel();
+    }
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.onstart = () => setSpeakingMessageId(messageId);
+    utterance.onend = () => setSpeakingMessageId(null);
+    utterance.onerror = () => setSpeakingMessageId(null);
+    speechSynthesis.speak(utterance);
+  };
+
+  const handleStopSpeaking = () => {
+    speechSynthesis.cancel();
+    setSpeakingMessageId(null);
+  };
+
+  const handleShareMessage = async (text) => {
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Eclipse AI Chat Response', text });
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          console.error('Error sharing message:', error);
+        }
+      }
+    } else {
+      handleCopyText(text);
+      alert('Share API not available. Response copied to clipboard.');
+    }
+  };
+
+  const handleEditPrompt = (chatId, aiMessageId) => {
+    const chat = chats[chatId];
+    if (!chat) return;
+    const aiMessageIndex = chat.messages.findIndex(m => m.id === aiMessageId);
+    if (aiMessageIndex > 0) {
+      const userMessage = chat.messages[aiMessageIndex - 1];
+      if (userMessage.sender === 'user') {
+        setInputText(userMessage.text);
+        // If the user message had an image, we should probably bring it back too
+        if (userMessage.uploadedImageUrl) {
+          // This is complex as we don't have the File object.
+          // For now, we just restore the text. A full implementation would need to handle this better.
+          console.log("Restoring text from prompt. Image re-upload would be needed for edit+image flow.");
+        }
+      }
+    }
+  };
+  
+  const handleRegenerate = (chatId, aiMessageId) => {
+    const chat = chats[chatId];
+    if (!chat) return;
+    const aiMessageIndex = chat.messages.findIndex(m => m.id === aiMessageId);
+    if (aiMessageIndex > 0) {
+      const userMessage = chat.messages[aiMessageIndex - 1];
+      if (userMessage.sender === 'user') {
+        // Remove the AI message we are regenerating from
+        const newMessages = chat.messages.slice(0, aiMessageIndex);
+        setChats(prev => ({
+          ...prev,
+          [chatId]: { ...prev[chatId], messages: newMessages }
+        }));
+        // Resend the user's message
+        handleSendMessage(userMessage.text || '', undefined);
+      }
+    }
+  };
+
+  const handleEditUserMessage = (chatId, messageId) => {
+    const chat = chats[chatId];
+    if (!chat) return;
+
+    const messageIndex = chat.messages.findIndex(m => m.id === messageId);
+    if (messageIndex === -1) return;
+    
+    const message = chat.messages[messageIndex];
+    
+    if (message && message.sender === 'user') {
+      setInputText(message.text || '');
+      
+      const newMessages = chat.messages.slice(0, messageIndex);
+      setChats(prev => ({
+        ...prev,
+        [chatId]: { ...prev[chatId], messages: newMessages }
+      }));
+      
+      if (message.uploadedImageUrl) {
+        console.warn("Editing a message with an image. Please re-upload the image if needed.");
+      }
+      clearImageToSend();
+    }
+  };
 
   return (
     React.createElement('div', { className: "flex h-screen bg-eclipse-dark-bg relative overflow-hidden" }, 
@@ -555,6 +808,8 @@ const App = () => {
         'aria-hidden': "true"
       }),
       React.createElement(Sidebar, {
+        theme: theme,
+        toggleTheme: toggleTheme,
         isOpen: sidebarOpen,
         toggleSidebar: toggleSidebar,
         chats: Object.values(chats),
@@ -567,29 +822,57 @@ const App = () => {
         onSelectImageFromLibrary: handleSelectImageFromLibrary,
         onDeleteImageFromLibrary: handleDeleteImageFromLibrary,
         onShareImageFromLibrary: handleShareImageFromLibrary,
+        onDownloadImageFromLibrary: handleDownloadImageFromLibrary,
+        isCodeSpaceActive: isCodeSpaceActive,
+        onToggleCodeSpace: handleToggleCodeSpace,
       }),
-      React.createElement(ChatArea, {
-        activeChat: activeChatId ? chats[activeChatId] : null,
-        messages: activeChatId && chats[activeChatId] ? chats[activeChatId].messages : [],
-        inputText: inputText,
-        onInputChange: setInputText,
-        onSendMessage: handleSendMessage, 
-        isSending: isSending,
-        onRetryMessage: handleRetryMessage,
-        sidebarOpen: sidebarOpen,
-        toggleSidebar: toggleSidebar,
-        onVoiceInputStart: handleVoiceInput,
-        isListening: isListening,
-        onImageFileSelectedForEdit: handleImageFileSelectedForEdit, 
-        imageToEditPreviewUrl: imageToEdit?.previewUrl,
-        onClearImageToEdit: clearImageToEdit,
-        onImageSelectedForSend: handleImageFileSelectedForSend,
-        imagePreviewForSendUrl: imageToSend?.previewUrl,
-        onClearImageToSend: clearImageToSend,
-        scrollToMessageId: scrollToMessageId,
-        onScrollToMessageComplete: handleScrollToMessageComplete,
-        onImageClick: handleOpenImageFullScreen,
-      }),
+      React.createElement('div', { className: 'flex-1 flex flex-row' },
+        React.createElement(ChatArea, {
+          activeChat: activeChatId ? chats[activeChatId] : null,
+          messages: activeChatId && chats[activeChatId] ? chats[activeChatId].messages : [],
+          inputText: inputText,
+          onInputChange: setInputText,
+          onSendMessage: handleSendMessage, 
+          isSending: isSending,
+          onRetryMessage: handleRetryMessage,
+          sidebarOpen: sidebarOpen,
+          toggleSidebar: toggleSidebar,
+          onVoiceInputStart: handleVoiceInput,
+          isListening: isListening,
+          onImageFileSelectedForEdit: handleImageFileSelectedForEdit, 
+          imageToEditPreviewUrl: imageToEdit?.previewUrl,
+          onClearImageToEdit: clearImageToEdit,
+          onImageSelectedForSend: handleImageFileSelectedForSend,
+          imagePreviewForSendUrl: imageToSend?.previewUrl,
+          onClearImageToSend: clearImageToSend,
+          scrollToMessageId: scrollToMessageId,
+          onScrollToMessageComplete: handleScrollToMessageComplete,
+          onImageClick: handleOpenImageFullScreen,
+          selectedTool: selectedTool,
+          onSelectTool: (toolId) => setSelectedTool(toolId),
+          onClearTool: () => setSelectedTool(null),
+          isCodeSpaceActive: isCodeSpaceActive,
+          // New action handlers
+          onCopyText: handleCopyText,
+          onFeedback: handleFeedback,
+          onRegenerate: handleRegenerate,
+          onEditPrompt: handleEditPrompt,
+          onSpeak: handleSpeak,
+          speakingMessageId: speakingMessageId,
+          onStopSpeaking: handleStopSpeaking,
+          onShare: handleShareMessage,
+          onEditUserMessage: handleEditUserMessage,
+        }),
+        isCodeSpaceActive && React.createElement(CodeSpace, { 
+          code: codeSpaceContent,
+          language: codeSpaceLanguage,
+          output: codeSpaceOutput,
+          onRun: handleRunCode,
+          onLanguageChange: setCodeSpaceLanguage,
+          onCodeChange: setCodeSpaceContent,
+          isRunning: isRunningCode,
+        })
+      ),
       fullScreenImageUrl && React.createElement(ImageFullScreenView, { 
         imageUrl: fullScreenImageUrl, 
         onClose: handleCloseImageFullScreen,

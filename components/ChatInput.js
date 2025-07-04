@@ -1,12 +1,13 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import IconButton from './IconButton';
 import { 
   IconMicrophone, 
   IconAdjustmentsHorizontal,
   IconPhoto, 
   IconXMark, 
-  IconArrowUp, // Added for new send icon
-  IconSpinner, // Added for loading state
+  IconArrowUp,
+  IconSpinner,
+  TOOLS_MENU,
 } from '../constants';
 
 const ChatInput = ({
@@ -18,10 +19,27 @@ const ChatInput = ({
   isListening,
   onImageSelected,      
   imagePreviewForSendUrl, 
-  onClearImageToSend,   
+  onClearImageToSend,
+  selectedTool,
+  onSelectTool,
+  onClearTool,
 }) => {
   const textareaRef = useRef(null);
-  const fileInputRef = useRef(null); 
+  const fileInputRef = useRef(null);
+  const dropdownRef = useRef(null);
+  const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsToolsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -60,6 +78,7 @@ const ChatInput = ({
   };
   
   const sendButtonDisabled = isSending || (!value.trim() && !imagePreviewForSendUrl);
+  const selectedToolConfig = selectedTool ? TOOLS_MENU.find(t => t.id === selectedTool) : null;
 
   return (
     React.createElement('div', { className: "w-full max-w-3xl mx-auto md:px-0" },
@@ -91,7 +110,6 @@ const ChatInput = ({
         }),
         React.createElement('div', { className: "flex items-center justify-between" },
           React.createElement('div', { className: "flex items-center space-x-1" },
-            // Plus button removed here
             React.createElement(IconButton, { 
               icon: React.createElement(IconPhoto, { className: "w-6 h-6" }),
               label: "Upload image",
@@ -106,14 +124,52 @@ const ChatInput = ({
               onChange: handleFileChange,
               className: "hidden"
             }),
-            React.createElement('button', {
-              onClick: () => console.log("Tools clicked"),
-              disabled: isSending,
-              className: "flex items-center px-2 py-1.5 text-eclipse-text-secondary hover:text-eclipse-text-primary rounded-lg text-sm transition-colors focus:outline-none focus:ring-1 focus:ring-eclipse-accent disabled:opacity-50",
-              'aria-label': "Tools"
-            },
-              React.createElement(IconAdjustmentsHorizontal, { className: "w-5 h-5 mr-1.5" }),
-              "Tools"
+            React.createElement('div', { className: 'relative', ref: dropdownRef },
+              !selectedToolConfig ? (
+                  React.createElement('button', {
+                      onClick: () => setIsToolsMenuOpen(prev => !prev),
+                      disabled: isSending,
+                      className: "flex items-center px-2 py-1.5 text-eclipse-text-secondary hover:text-eclipse-text-primary rounded-lg text-sm transition-colors focus:outline-none focus:ring-1 focus:ring-eclipse-accent disabled:opacity-50",
+                      'aria-label': "Tools"
+                  },
+                      React.createElement(IconAdjustmentsHorizontal, { className: "w-5 h-5 mr-1.5" }),
+                      "Tools"
+                  )
+              ) : (
+                  React.createElement('div', { className: "flex items-center pl-1 pr-2 py-1 bg-eclipse-active-bg/50 text-eclipse-text-secondary rounded-lg" },
+                      React.createElement(IconButton, {
+                          icon: React.createElement(IconAdjustmentsHorizontal, { className: "w-5 h-5" }),
+                          label: "Tools",
+                          onClick: () => setIsToolsMenuOpen(prev => !prev),
+                          className: "p-1 hover:text-eclipse-text-primary"
+                      }),
+                      React.createElement('div', { className: "w-px h-4 bg-eclipse-border mx-1.5" }),
+                      React.createElement('div', { className: "flex items-center" },
+                          React.createElement(selectedToolConfig.icon, { className: "w-5 h-5 mr-1.5 text-blue-400" }),
+                          React.createElement('span', { className: "text-sm font-medium text-eclipse-text-primary" }, selectedToolConfig.label),
+                          React.createElement(IconButton, {
+                              icon: React.createElement(IconXMark, { className: "w-4 h-4 text-eclipse-text-secondary" }),
+                              label: `Clear tool: ${selectedToolConfig.label}`,
+                              onClick: onClearTool,
+                              className: "p-0.5 ml-1.5 rounded-full hover:bg-eclipse-hover-bg hover:text-eclipse-text-primary"
+                          })
+                      )
+                  )
+              ),
+              isToolsMenuOpen && React.createElement('div', {
+                  className: "absolute bottom-full mb-2 w-64 bg-eclipse-sidebar-bg rounded-lg shadow-xl border border-eclipse-border p-1 z-20"
+              },
+                  TOOLS_MENU.map(tool => (
+                      React.createElement('button', {
+                          key: tool.id,
+                          onClick: () => { onSelectTool(tool.id); setIsToolsMenuOpen(false); },
+                          className: "w-full flex items-center text-left p-2 rounded-md hover:bg-eclipse-hover-bg"
+                      },
+                          React.createElement(tool.icon, { className: "w-5 h-5 mr-3 text-eclipse-text-secondary" }),
+                          React.createElement('span', { className: "text-sm text-eclipse-text-primary" }, tool.label)
+                      )
+                  ))
+              )
             )
           ),
           React.createElement('div', { className: "flex items-center space-x-2" },

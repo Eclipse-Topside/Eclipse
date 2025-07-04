@@ -1,18 +1,65 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import UserAvatar from './UserAvatar';
 import IconButton from './IconButton';
-import { IconArrowPath, IconDownload } from '../constants'; 
+import { 
+  IconArrowPath, 
+  IconDownload,
+  IconDocumentDuplicate,
+  IconHandThumbUp,
+  IconHandThumbDown,
+  IconSpeakerWave,
+  IconSparkles,
+  IconShare,
+  IconCheck,
+  IconStop,
+  IconChevronDown,
+  IconPencil,
+} from '../constants'; 
 
 // TYPING_SPEED_MS constant removed
 
-const ChatMessage = ({ message, onRetry, onImageClick }) => {
+const ChatMessage = ({ 
+  message, 
+  onRetry, 
+  onImageClick, 
+  isCodeSpaceActive,
+  onCopy,
+  onFeedback,
+  onRegenerate,
+  onEdit,
+  onSpeak,
+  isSpeaking,
+  onStopSpeaking,
+  onShare,
+  onEditUserMessage,
+}) => {
   const isUser = message.sender === 'user';
   const isAI = message.sender === 'ai';
 
-  // currentDisplayableText, typingTimeoutRef, animatedMessageIdRef removed
+  const [copied, setCopied] = useState(false);
 
-  // useEffect for typing animation removed
+  const handleCopy = () => {
+    if (message.text) {
+      onCopy(message.text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleToggleSpeak = () => {
+    if (isSpeaking) {
+      onStopSpeaking();
+    } else {
+      onSpeak(message.text);
+    }
+  };
+  
+  const handleUserEdit = () => {
+    if (onEditUserMessage) {
+        onEditUserMessage(message.id);
+    }
+  };
+
 
   const formatText = (text) => {
     let html = text
@@ -21,9 +68,9 @@ const ChatMessage = ({ message, onRetry, onImageClick }) => {
         const lines = code.trim().split('\n');
         const language = lines[0].match(/^(python|javascript|typescript|html|css|json|bash|shell|java|csharp|cpp)/i) ? lines[0] : '';
         const actualCode = language ? lines.slice(1).join('\n') : code;
-        return `<pre class="bg-black/20 p-3 rounded-md my-2 overflow-x-auto text-sm"><code class="language-${language.toLowerCase()}">${actualCode.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</code></pre>`;
+        return `<pre class="bg-eclipse-code-bg p-3 rounded-md my-2 overflow-x-auto text-sm"><code class="language-${language.toLowerCase()}">${actualCode.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</code></pre>`;
       })
-      .replace(/`([^`]+)`/g, '<code class="bg-black/20 px-1 py-0.5 rounded text-sm">$1</code>');
+      .replace(/`([^`]+)`/g, '<code class="bg-eclipse-code-bg px-1 py-0.5 rounded text-sm">$1</code>');
     return { __html: html };
   };
 
@@ -105,6 +152,73 @@ const ChatMessage = ({ message, onRetry, onImageClick }) => {
     );
   }
 
+  if (isAI && !message.isLoading && !message.isError) {
+    messageContentElements.push(
+      React.createElement('div', { key: 'actions', className: 'flex items-center space-x-1 mt-3 -ml-2' },
+        React.createElement(IconButton, {
+          icon: copied ? React.createElement(IconCheck, { className: "w-5 h-5 text-green-500" }) : React.createElement(IconDocumentDuplicate, { className: "w-5 h-5" }),
+          label: copied ? 'Copied!' : 'Copy',
+          onClick: handleCopy,
+          className: 'text-eclipse-text-secondary hover:text-eclipse-text-primary'
+        }),
+        React.createElement(IconButton, {
+          icon: React.createElement(IconHandThumbUp, { className: `w-5 h-5 ${message.feedback === 'up' ? 'text-blue-500 fill-blue-500/20' : ''}` }),
+          label: 'Good response',
+          onClick: () => onFeedback(message.id, 'up'),
+          className: 'text-eclipse-text-secondary hover:text-eclipse-text-primary'
+        }),
+        React.createElement(IconButton, {
+          icon: React.createElement(IconHandThumbDown, { className: `w-5 h-5 ${message.feedback === 'down' ? 'text-red-500 fill-red-500/20' : ''}` }),
+          label: 'Bad response',
+          onClick: () => onFeedback(message.id, 'down'),
+          className: 'text-eclipse-text-secondary hover:text-eclipse-text-primary'
+        }),
+        React.createElement(IconButton, {
+          icon: isSpeaking ? React.createElement(IconStop, { className: "w-5 h-5" }) : React.createElement(IconSpeakerWave, { className: "w-5 h-5" }),
+          label: isSpeaking ? 'Stop speaking' : 'Read aloud',
+          onClick: handleToggleSpeak,
+          className: 'text-eclipse-text-secondary hover:text-eclipse-text-primary'
+        }),
+        React.createElement(IconButton, {
+          icon: React.createElement(IconSparkles, { className: "w-5 h-5" }),
+          label: 'Edit prompt',
+          onClick: () => onEdit(message.id),
+          className: 'text-eclipse-text-secondary hover:text-eclipse-text-primary bg-eclipse-input-bg'
+        }),
+        React.createElement(IconButton, {
+          icon: React.createElement(IconArrowPath, { className: "w-5 h-5" }),
+          label: 'Regenerate',
+          onClick: () => onRegenerate(message.id),
+          className: 'text-eclipse-text-secondary hover:text-eclipse-text-primary'
+        }),
+        React.createElement(IconButton, {
+          icon: React.createElement(IconShare, { className: "w-5 h-5" }),
+          label: 'Share',
+          onClick: () => onShare(message.text),
+          className: 'text-eclipse-text-secondary hover:text-eclipse-text-primary'
+        })
+      )
+    );
+  } else if (isUser && !message.isError && (message.text || message.uploadedImageUrl)) {
+      messageContentElements.push(
+        React.createElement('div', { key: 'user-actions', className: 'flex items-center space-x-1 mt-2' },
+          React.createElement(IconButton, {
+            icon: copied ? React.createElement(IconCheck, { className: "w-5 h-5 text-green-400" }) : React.createElement(IconDocumentDuplicate, { className: "w-5 h-5" }),
+            label: copied ? 'Copied!' : 'Copy',
+            onClick: handleCopy,
+            className: 'text-white/80 hover:text-white p-1.5 hover:bg-white/10 rounded-lg'
+          }),
+          React.createElement(IconButton, {
+            icon: React.createElement(IconPencil, { className: "w-5 h-5" }),
+            label: 'Edit',
+            onClick: handleUserEdit,
+            className: 'text-white/80 hover:text-white p-1.5 hover:bg-white/10 rounded-lg'
+          }),
+        )
+      );
+  }
+
+
   if (message.sources && message.sources.length > 0) {
     messageContentElements.push(
       React.createElement('div', { key: 'sources', className: "mt-3 pt-2 border-t border-eclipse-border/50" },
@@ -134,18 +248,21 @@ const ChatMessage = ({ message, onRetry, onImageClick }) => {
       }
   }
 
+  const bubbleClasses = isUser 
+    ? `p-3 rounded-lg shadow-sm ${isCodeSpaceActive ? 'bg-zinc-800 text-gray-200' : 'bg-blue-600 text-white'}` 
+    : 'text-eclipse-text-primary';
 
   return (
     React.createElement('div', { className: `py-4 px-2 md:px-0 flex ${isUser ? 'justify-end' : ''}` },
       React.createElement('div', { className: `flex items-start gap-3 w-full max-w-2xl mx-auto ${isUser ? 'flex-row-reverse' : ''}` },
         isAI && React.createElement('img', { 
-            src: "./eclipsepro.png", 
+            src: "./unnamed.png", 
             alt: "Eclipse AI Avatar",
             className: "flex-shrink-0 w-8 h-8 rounded-full object-cover" 
         }),
         isUser && React.createElement(UserAvatar, { name: "User", size: "md", className: "bg-blue-500" }),
         React.createElement('div', { 
-          className: `${isUser ? 'p-3 rounded-lg shadow-sm bg-blue-600 text-white' : 'text-eclipse-text-primary'} ${message.isLoading && isAI && !message.imageUrl && !textForDisplay ? 'animate-pulse' : ''}` // Ensure pulse only shows when truly loading and no text yet
+          className: `${bubbleClasses} ${message.isLoading && isAI && !message.imageUrl && !textForDisplay ? 'animate-pulse' : ''}` // Ensure pulse only shows when truly loading and no text yet
          },
          messageContentElements
         )

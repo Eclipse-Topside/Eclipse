@@ -5,20 +5,51 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Eclipse AI Chat</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      :root[data-theme='light'] {
+        --color-bg-dark: #FFFFFF;
+        --color-bg-sidebar: #F7F7F8;
+        --color-bg-input: #F0F0F3;
+        --color-bg-hover: #E8E8EB;
+        --color-bg-active: #E0E0E6;
+        --color-border: #DCDCE0;
+        --color-text-primary: #111111;
+        --color-text-secondary: #6B7280;
+        --color-code-bg: #F3F4F6;
+      }
+      :root[data-theme='dark'] {
+        --color-bg-dark: #171717;
+        --color-bg-sidebar: #202020;
+        --color-bg-input: #2A2A2F;
+        --color-bg-hover: #3A3A3F;
+        --color-bg-active: #3D3D52;
+        --color-border: #383838;
+        --color-text-primary: #E0E0E0;
+        --color-text-secondary: #A0A0A0;
+        --color-code-bg: #111827;
+      }
+    </style>
+    <script>
+      (function() {
+        const theme = localStorage.getItem('eclipse-theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
             colors: {
-              'eclipse-dark-bg': '#171717',      // Main application background
-              'eclipse-sidebar-bg': '#202020',  // Sidebar background
-              'eclipse-input-bg': '#2A2A2F',    // Input fields, AI message bubbles
-              'eclipse-hover-bg': '#3A3A3F',    // Hover state for interactive elements
-              'eclipse-active-bg': '#3D3D52',   // Active/selected state (e.g., active chat item)
-              'eclipse-border': '#383838',      // Borders and separators
-              'eclipse-text-primary': '#E0E0E0', // Primary text color
-              'eclipse-text-secondary': '#A0A0A0',// Secondary text, placeholders
-              'eclipse-accent': '#60A5FA',       // Main accent color (blueish)
+              'eclipse-dark-bg': 'var(--color-bg-dark)',
+              'eclipse-sidebar-bg': 'var(--color-bg-sidebar)',
+              'eclipse-input-bg': 'var(--color-bg-input)',
+              'eclipse-hover-bg': 'var(--color-bg-hover)',
+              'eclipse-active-bg': 'var(--color-bg-active)',
+              'eclipse-border': 'var(--color-border)',
+              'eclipse-text-primary': 'var(--color-text-primary)',
+              'eclipse-text-secondary': 'var(--color-text-secondary)',
+              'eclipse-accent': '#60A5FA',
+              'eclipse-code-bg': 'var(--color-code-bg)',
               // Standard Tailwind colors are also available and used (e.g., bg-blue-500, text-red-400)
             }
           }
@@ -36,11 +67,9 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
 <body class="bg-eclipse-dark-bg text-eclipse-text-primary">
     <div id="root"></div>
     <script type="module" src="./index.js"></script>
-<script type="module" src="/index.tsx"></script>
 </body>
 </html>

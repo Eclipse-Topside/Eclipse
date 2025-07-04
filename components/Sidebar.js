@@ -1,7 +1,12 @@
 
+
+
+
+
+
+
 import React, { useState, useEffect } from 'react';
 import { 
-  IconBan, 
   IconSearch, 
   IconArrowPath, 
   IconClock, 
@@ -13,7 +18,12 @@ import {
   IconTrash,
   IconPhoto,
   IconArrowLeft,
-  IconShare
+  IconShare,
+  IconSun,
+  IconMoon,
+  IconCodeBracket,
+  IconDownload,
+  IconArrowsPointingOut
 } from '../constants';
 import UserAvatar from './UserAvatar';
 import IconButton from './IconButton';
@@ -42,6 +52,8 @@ const NavItem = ({ icon, label, isActive, onClick, isOpen, isHeading, className 
 
 
 const Sidebar = ({ 
+  theme,
+  toggleTheme,
   isOpen, 
   toggleSidebar,
   chats,
@@ -53,7 +65,10 @@ const Sidebar = ({
   imageLibrary,
   onSelectImageFromLibrary,
   onDeleteImageFromLibrary,
-  onShareImageFromLibrary
+  onShareImageFromLibrary,
+  onDownloadImageFromLibrary,
+  isCodeSpaceActive,
+  onToggleCodeSpace,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentView, setCurrentView] = useState('chats'); // 'chats' or 'images'
@@ -108,7 +123,11 @@ const Sidebar = ({
     },
       React.createElement('div', { className: "flex flex-col flex-grow p-3 overflow-y-hidden" }, // Main container for sidebar content
         React.createElement('div', { className: `flex items-center ${isOpen ? 'justify-start px-1' : 'justify-center'} h-12 mb-3` },
-          React.createElement(IconBan, { className: `w-7 h-7 text-eclipse-text-secondary transition-all duration-300 ${isOpen ? 'transform scale-100' : 'transform scale-90'}` })
+          React.createElement('img', { 
+            src: './eclipsepro.png', 
+            alt: 'Eclipse AI Logo', 
+            className: `w-8 h-8 rounded-full object-cover transition-all duration-300 ${isOpen ? 'transform scale-100' : 'transform scale-90'}` 
+          })
         ),
 
         isOpen && currentView === 'chats' && (
@@ -162,7 +181,7 @@ const Sidebar = ({
                         label: "Chat", 
                         onClick: () => { onNewChat(); setCurrentView('chats'); }, 
                         isOpen: isOpen, 
-                        isActive: currentView === 'chats' && !activeChatId && (!chats.find(c => c.id === activeChatId) || chats.find(c => c.id === activeChatId)?.messages.length === 0) 
+                        isActive: currentView === 'chats' && !activeChatId && !isCodeSpaceActive && (!chats.find(c => c.id === activeChatId) || chats.find(c => c.id === activeChatId)?.messages.length === 0) 
                     }),
                     React.createElement(NavItem, { 
                         icon: React.createElement(IconPhoto, { className: "w-5 h-5" }), 
@@ -173,6 +192,13 @@ const Sidebar = ({
                     }),
                     React.createElement(NavItem, { icon: React.createElement(IconClock, { className: "w-5 h-5" }), label: "Tasks", onClick: () => alert("Tasks clicked (placeholder)"), isOpen: isOpen }),
                     React.createElement(NavItem, { icon: React.createElement(IconCube, { className: "w-5 h-5" }), label: "Workspaces", onClick: () => alert("Workspaces clicked (placeholder)"), isOpen: isOpen }),
+                    React.createElement(NavItem, { 
+                        icon: React.createElement(IconCodeBracket, { className: "w-5 h-5" }), 
+                        label: "Code Space", 
+                        onClick: onToggleCodeSpace, 
+                        isOpen: isOpen,
+                        isActive: isCodeSpaceActive,
+                    }),
                     React.createElement(NavItem, { icon: React.createElement(IconMenu, { className: "w-5 h-5" }), label: "History", isOpen: isOpen, isHeading: true })
                 )
             )
@@ -242,20 +268,34 @@ const Sidebar = ({
                               onClick: () => onSelectImageFromLibrary(img.imageUrl)
                           }),
                           React.createElement('div', {
-                              className: "absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center space-x-2"
+                              className: "absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-2"
                           },
-                              React.createElement(IconButton, {
-                                  icon: React.createElement(IconShare, { className: "w-5 h-5 text-white" }),
-                                  label: "Share image",
-                                  onClick: (e) => { e.stopPropagation(); onShareImageFromLibrary(img.imageUrl, img.promptText); },
-                                  className: "p-2 hover:bg-black/75 rounded-full"
-                              }),
-                              React.createElement(IconButton, {
-                                  icon: React.createElement(IconTrash, { className: "w-5 h-5 text-white" }),
-                                  label: "Delete image",
-                                  onClick: (e) => { e.stopPropagation(); onDeleteImageFromLibrary(img.messageId); },
-                                  className: "p-2 hover:bg-red-500/75 rounded-full"
-                              })
+                              React.createElement('div', { className: "grid grid-cols-2 gap-2" },
+                                  React.createElement(IconButton, {
+                                      icon: React.createElement(IconArrowsPointingOut, { className: "w-5 h-5 text-white" }),
+                                      label: "Full Screen",
+                                      onClick: (e) => { e.stopPropagation(); onSelectImageFromLibrary(img.imageUrl); },
+                                      className: "p-2 hover:bg-black/75 rounded-lg"
+                                  }),
+                                  React.createElement(IconButton, {
+                                      icon: React.createElement(IconShare, { className: "w-5 h-5 text-white" }),
+                                      label: "Share image",
+                                      onClick: (e) => { e.stopPropagation(); onShareImageFromLibrary(img.imageUrl, img.promptText); },
+                                      className: "p-2 hover:bg-black/75 rounded-lg"
+                                  }),
+                                  React.createElement(IconButton, {
+                                      icon: React.createElement(IconDownload, { className: "w-5 h-5 text-white" }),
+                                      label: "Download image",
+                                      onClick: (e) => { e.stopPropagation(); onDownloadImageFromLibrary(img.imageUrl); },
+                                      className: "p-2 hover:bg-black/75 rounded-lg"
+                                  }),
+                                  React.createElement(IconButton, {
+                                      icon: React.createElement(IconTrash, { className: "w-5 h-5 text-white" }),
+                                      label: "Delete image",
+                                      onClick: (e) => { e.stopPropagation(); onDeleteImageFromLibrary(img.messageId); },
+                                      className: "p-2 hover:bg-red-500/75 rounded-lg"
+                                  })
+                              )
                           )
                       )
                     ))
@@ -273,15 +313,46 @@ const Sidebar = ({
         )
       ),
       React.createElement('div', { className: "p-3 border-t border-eclipse-border" },
-        React.createElement('div', { className: `flex items-center ${isOpen ? 'justify-between' : 'justify-center flex-col space-y-2'}` },
-          React.createElement(UserAvatar, { name: "Eclipse", size: isOpen ? "sm" : "md", bgColorClassName: "bg-teal-500", className: `${isOpen ? 'mr-2' : 'mr-0'}` }),
-          isOpen && React.createElement('span', { className: "sr-only" }, "Eclipse User"),
-          React.createElement(IconButton, { 
-            icon: isOpen ? React.createElement(IconCollapseSidebar, { className: "w-5 h-5 text-eclipse-text-secondary" }) : React.createElement(IconExpandSidebar, { className: "w-5 h-5 text-eclipse-text-secondary" }), 
-            onClick: toggleSidebar, 
-            label: isOpen ? "Collapse sidebar" : "Expand sidebar",
-            className: "hover:text-eclipse-text-primary md:block" 
-          })
+        isOpen ? (
+          // Expanded view
+          React.createElement('div', { className: 'flex items-center justify-between' },
+            React.createElement(UserAvatar, { name: "Eclipse", size: "sm", bgColorClassName: "bg-teal-500" }),
+            React.createElement('div', { className: 'flex items-center space-x-1' },
+              React.createElement(IconButton, {
+                icon: theme === 'light' 
+                  ? React.createElement(IconMoon, { className: "w-5 h-5 text-eclipse-text-secondary" }) 
+                  : React.createElement(IconSun, { className: "w-5 h-5 text-eclipse-text-secondary" }),
+                onClick: toggleTheme,
+                label: `Switch to ${theme === 'light' ? 'dark' : 'light'} theme`,
+                className: "hover:text-eclipse-text-primary"
+              }),
+              React.createElement(IconButton, { 
+                icon: React.createElement(IconCollapseSidebar, { className: "w-5 h-5 text-eclipse-text-secondary" }), 
+                onClick: toggleSidebar, 
+                label: "Collapse sidebar",
+                className: "hover:text-eclipse-text-primary" 
+              })
+            )
+          )
+        ) : (
+          // Collapsed view
+          React.createElement('div', { className: 'flex flex-col items-center space-y-2' },
+            React.createElement(UserAvatar, { name: "Eclipse", size: "md", bgColorClassName: "bg-teal-500" }),
+            React.createElement(IconButton, {
+              icon: theme === 'light' 
+                ? React.createElement(IconMoon, { className: "w-5 h-5 text-eclipse-text-secondary" }) 
+                : React.createElement(IconSun, { className: "w-5 h-5 text-eclipse-text-secondary" }),
+              onClick: toggleTheme,
+              label: `Switch to ${theme === 'light' ? 'dark' : 'light'} theme`,
+              className: "hover:text-eclipse-text-primary"
+            }),
+            React.createElement(IconButton, { 
+              icon: React.createElement(IconExpandSidebar, { className: "w-5 h-5 text-eclipse-text-secondary" }), 
+              onClick: toggleSidebar, 
+              label: "Expand sidebar",
+              className: "hover:text-eclipse-text-primary" 
+            })
+          )
         )
       ),
       React.createElement('style', null, `

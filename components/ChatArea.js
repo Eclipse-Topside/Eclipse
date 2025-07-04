@@ -1,5 +1,11 @@
 
 
+
+
+
+
+
+
 import React, { useEffect, useRef, useState } from 'react';
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
@@ -7,7 +13,7 @@ import SuggestionChip from './SuggestionChip';
 import UserAvatar from './UserAvatar';
 import IconButton from './IconButton';
 import ImageFullScreenView from './ImageFullScreenView';
-import { IconMenu, IconSparkles, SUGGESTIONS, SuggestionType } from '../constants';
+import { IconMenu, SUGGESTIONS, SuggestionType } from '../constants';
 
 const ChatArea = ({
   activeChat,
@@ -30,6 +36,19 @@ const ChatArea = ({
   scrollToMessageId,
   onScrollToMessageComplete,
   onImageClick,
+  selectedTool,
+  onSelectTool,
+  onClearTool,
+  isCodeSpaceActive,
+  onCopyText,
+  onFeedback,
+  onRegenerate,
+  onEditPrompt,
+  onSpeak,
+  speakingMessageId,
+  onStopSpeaking,
+  onShare,
+  onEditUserMessage,
 }) => {
   const messagesEndRef = useRef(null);
   const imageEditFileInputRef = useRef(null); 
@@ -94,7 +113,7 @@ const ChatArea = ({
   if (currentMessages.length === 0 && !isSending && !imagePreviewForSendUrl && !imageToEditPreviewUrl) { 
     messageElements.push(
       React.createElement('div', { key: 'empty-chat', className: "flex flex-col items-center justify-center h-full text-center" },
-        React.createElement(IconSparkles, { className: "w-16 h-16 text-eclipse-accent mb-4" }),
+        React.createElement('img', { src: './eclipsepro.png', alt: 'Eclipse AI Logo', className: "w-16 h-16 rounded-full mb-4" }),
         React.createElement('h2', { className: "text-3xl font-semibold text-eclipse-text-primary mb-2" }, "Eclipse"),
         React.createElement('p', { className: "text-lg text-eclipse-text-secondary mb-6" }, "How can I help you today?")
       )
@@ -107,7 +126,17 @@ const ChatArea = ({
           React.createElement(ChatMessage, { 
             message: msg, 
             onRetry: activeChat && msg.isError ? () => onRetryMessage(activeChat.id, msg.id) : undefined, 
-            onImageClick: (msg.imageUrl || msg.uploadedImageUrl) ? onImageClick : undefined
+            onImageClick: (msg.imageUrl || msg.uploadedImageUrl) ? onImageClick : undefined,
+            isCodeSpaceActive: isCodeSpaceActive,
+            onCopy: onCopyText,
+            onFeedback: (messageId, feedbackType) => onFeedback(activeChat.id, messageId, feedbackType),
+            onRegenerate: (messageId) => onRegenerate(activeChat.id, messageId),
+            onEdit: (messageId) => onEditPrompt(activeChat.id, messageId),
+            onSpeak: (text) => onSpeak(text, msg.id),
+            isSpeaking: speakingMessageId === msg.id,
+            onStopSpeaking: onStopSpeaking,
+            onShare: onShare,
+            onEditUserMessage: (messageId) => onEditUserMessage(activeChat.id, messageId),
           })
         )
       );
@@ -130,7 +159,7 @@ const ChatArea = ({
 
 
   return (
-    React.createElement('div', { className: "flex-1 flex flex-col h-screen overflow-hidden bg-eclipse-dark-bg" },
+    React.createElement('div', { className: "flex-1 flex flex-col h-screen overflow-hidden" },
       React.createElement('header', { className: "p-4 flex items-center justify-between border-b border-eclipse-border md:hidden" },
         React.createElement(IconButton, {
             icon: React.createElement(IconMenu, { className: "w-6 h-6 text-eclipse-text-primary" }),
@@ -155,7 +184,7 @@ const ChatArea = ({
         accept: "image/*", 
         style: { display: 'none' } 
       }),
-      React.createElement('footer', { className: "p-3 md:p-6 border-t border-eclipse-border/50 bg-eclipse-dark-bg" },
+      React.createElement('footer', { className: "p-3 md:p-6" },
          (currentMessages.length === 0 || (imageToEditPreviewUrl && !imagePreviewForSendUrl)) && !isSending && 
           React.createElement('div', { className: "flex flex-wrap gap-2.5 justify-center mb-3 max-w-2xl mx-auto" },
             displayedSuggestions.map((s) => (
@@ -172,6 +201,9 @@ const ChatArea = ({
           onImageSelected: onImageSelectedForSend,
           imagePreviewForSendUrl: imagePreviewForSendUrl,
           onClearImageToSend: onClearImageToSend,
+          selectedTool: selectedTool,
+          onSelectTool: onSelectTool,
+          onClearTool: onClearTool,
         }),
          React.createElement('p', { className: "text-xs text-center text-eclipse-text-secondary mt-3" },
             "Eclipse can make mistakes. Consider checking important information."
